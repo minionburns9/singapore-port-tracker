@@ -1,3 +1,7 @@
+let previousShipFeatures = {};
+let currentShipFeatures = {};
+let animationFrameId = null;
+
 async function initApp() {
   appLog("app.js loaded");
 
@@ -7,9 +11,6 @@ async function initApp() {
     appLog("ERROR: #map container not found");
     return;
   }
-
-  appLog("Map container width: " + mapContainer.offsetWidth);
-  appLog("Map container height: " + mapContainer.offsetHeight);
 
   if (typeof mapboxgl === "undefined") {
     appLog("ERROR: Mapbox GL JS is not loaded");
@@ -40,105 +41,93 @@ async function initApp() {
 
   mapboxgl.accessToken = config.mapbox_token;
 
-  let map;
+  const map = new mapboxgl.Map({
+    container: "map",
+    style: "mapbox://styles/mapbox/satellite-streets-v12",
+    center: [103.82, 1.23],
+    zoom: 10.2,
+    pitch: 0,
+    bearing: 0
+  });
 
-  try {
-    appLog("Creating Mapbox map");
+  map.addControl(new mapboxgl.NavigationControl(), "bottom-right");
 
-    map = new mapboxgl.Map({
-      container: "map",
-      style: "mapbox://styles/mapbox/satellite-streets-v12",
-      center: [103.82, 1.23],
-      zoom: 10.2,
-      pitch: 0,
-      bearing: 0
+  map.on("load", async function () {
+    appLog("Mapbox map LOAD event fired");
+
+    map.addSource("ships-source", {
+      type: "geojson",
+      data: emptyFeatureCollection()
     });
 
-    appLog("Mapbox map object created");
+    map.addLayer({
+      id: "ships-glow",
+      type: "circle",
+      source: "ships-source",
+      paint: {
+        "circle-radius": 14,
+        "circle-color": ["get", "color"],
+        "circle-opacity": 0.22,
+        "circle-blur": 0.9
+      }
+    });
 
-    map.addControl(new mapboxgl.NavigationControl(), "bottom-right");
+    map.addLayer({
+      id: "ships",
+      type: "circle",
+      source: "ships-source",
+      paint: {
+        "circle-radius": 6,
+        "circle-color": ["get", "color"],
+        "circle-stroke-width": 1,
+        "circle-stroke-color": "#ffffff",
+        "circle-opacity": 0.95
+      }
+    });
 
-    map.on("load", async function () {
-      appLog("Mapbox map LOAD event fired");
+    map.on("click", "ships", function (event) {
+      const feature = event.features[0];
+      const props = feature.properties;
+      const coords = feature.geometry.coordinates.slice();
 
-      map.addSource("ships-source", {
-        type: "geojson",
-        data: emptyFeatureCollection()
-      });
+      new mapboxgl.Popup()
+        .setLngLat(coords)
+        .setHTML(`
+          <strong>${props.name}</strong><br>
+          MMSI: ${props.mmsi}<br>
+          Type: ${props.type}<br>
+          Speed: ${props.speed} knots<br>
+          Heading: ${props.heading}°<br>
+          Source: ${props.source}<br>
+          Last seen: ${props.last_seen}
+        `)
+        .addTo(map);
+    });
 
-      map.addLayer({
-        id: "ships-glow",
-        type: "circle",
-        source: "ships-source",
-        paint: {
-          "circle-radius": 12,
-          "circle-color": ["get", "color"],
-          "circle-opacity": 0.20,
-          "circle-blur": 0.9
-        }
-      });
+    map.on("mouseenter", "ships", function () {
+      map.getCanvas().style.cursor = "pointer";
+    });
 
-      map.addLayer({
-        id: "ships",
-        type: "circle",
-        source: "ships-source",
-        paint: {
-          "circle-radius": 6,
-          "circle-color": ["get", "color"],
-          "circle-stroke-width": 1,
-          "circle-stroke-color": "#ffffff",
-          "circle-opacity": 0.95
-        }
-      });
+    map.on("mouseleave", "ships", function () {
+      map.getCanvas().style.cursor = "";
+    });
 
-      map.on("click", "ships", function (event) {
-        const feature = event.features[0];
-        const props = feature.properties;
-        const coords = feature.geometry.coordinates.slice();
+    await refreshAll(map);
 
-        new mapboxgl.Popup()
-          .setLngLat(coords)
-          .setHTML(`
-            <strong>${props.name}</strong><br>
-            MMSI: ${props.mmsi}<br>
-            Type: ${props.type}<br>
-            Speed: ${props.speed} knots<br>
-            Heading: ${props.heading}°<br>
-            Source: ${props.source}<br>
-            Last seen: ${props.last_seen}
-          `)
-          .addTo(map);
-      });
-
-      map.on("mouseenter", "ships", function () {
-        map.getCanvas().style.cursor = "pointer";
-      });
-
-      map.on("mouseleave", "ships", function () {
-        map.getCanvas().style.cursor = "";
-      });
-
+    setInterval(async function () {
       await refreshAll(map);
-      setInterval(async function () {
-        await refreshAll(map);
-      }, 10000);
-    });
+    }, 10000);
+  });
 
-    map.on("error", function (event) {
-      appLog("MAPBOX ERROR: " + JSON.stringify(event.error || event));
-    });
-
-  } catch (error) {
-    appLog("ERROR: Mapbox map creation failed: " + error);
-    mapContainer.innerHTML = "<div class='error-box'>Mapbox map creation failed.</div>";
-    return;
-  }
+  map.on("error", function (event) {
+    appLog("MAPBOX ERROR: " + JSON.stringify(event.error || event));
+  });
 }
 
 async function refreshAll(map) {
   await loadStatus();
   await loadMetrics();
-  await loadShips(map);
+  await loadShipsAnimated(map);
 }
 
 async function loadStatus() {
@@ -151,8 +140,6 @@ async function loadStatus() {
     document.getElementById("ais_messages").innerText = data.message_count || 0;
     document.getElementById("ais_last_message").innerText = data.last_message_time || "-";
     document.getElementById("ais_error").innerText = data.error || "-";
-
-    appLog("AIS status: " + data.mode + ", messages: " + data.message_count);
   } catch (error) {
     appLog("ERROR: Could not load /ais-status: " + error);
   }
@@ -168,51 +155,135 @@ async function loadMetrics() {
     document.getElementById("cargo").innerText = data.cargo;
     document.getElementById("anchored").innerText = data.anchored;
     document.getElementById("congestion").innerText = data.congestion;
-
-    appLog("/metrics loaded");
   } catch (error) {
     appLog("ERROR: Could not load /metrics: " + error);
   }
 }
 
-async function loadShips(map) {
+async function loadShipsAnimated(map) {
   try {
     const res = await fetch("/ships");
     const ships = await res.json();
 
     appLog("/ships loaded. Count: " + ships.length);
 
-    const geojson = {
-      type: "FeatureCollection",
-      features: ships.map(function (ship) {
-        return {
-          type: "Feature",
-          geometry: {
-            type: "Point",
-            coordinates: [ship.lng, ship.lat]
-          },
-          properties: {
-            mmsi: ship.mmsi || "-",
-            name: ship.name || "Unknown vessel",
-            type: ship.type || "Unknown",
-            speed: ship.speed || 0,
-            heading: ship.heading || 0,
-            last_seen: ship.last_seen || "-",
-            source: ship.source || "AISStream",
-            color: getShipColor(ship.type)
-          }
-        };
-      })
-    };
+    const nextFeatures = {};
 
-    const source = map.getSource("ships-source");
-    if (source) {
-      source.setData(geojson);
+    ships.forEach(function (ship) {
+      const id = String(ship.mmsi || ship.name);
+
+      nextFeatures[id] = {
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [ship.lng, ship.lat]
+        },
+        properties: {
+          id: id,
+          mmsi: ship.mmsi || "-",
+          name: ship.name || "Unknown vessel",
+          type: ship.type || "Unknown",
+          speed: ship.speed || 0,
+          heading: ship.heading || 0,
+          last_seen: ship.last_seen || "-",
+          source: ship.source || "AISStream",
+          color: getShipColor(ship.type)
+        }
+      };
+    });
+
+    if (Object.keys(currentShipFeatures).length === 0) {
+      currentShipFeatures = nextFeatures;
+      setMapSourceData(map, objectToFeatureCollection(currentShipFeatures));
+      appLog("Initial ship layer rendered");
+      return;
     }
+
+    previousShipFeatures = currentShipFeatures;
+    currentShipFeatures = nextFeatures;
+
+    animateShipTransition(map, previousShipFeatures, currentShipFeatures, 9000);
 
   } catch (error) {
     appLog("ERROR: Could not load ships: " + error);
   }
+}
+
+function animateShipTransition(map, fromFeatures, toFeatures, durationMs) {
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId);
+  }
+
+  const startTime = performance.now();
+
+  function step(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / durationMs, 1);
+    const easedProgress = easeInOutCubic(progress);
+
+    const animatedFeatures = {};
+
+    Object.keys(toFeatures).forEach(function (id) {
+      const toFeature = toFeatures[id];
+      const fromFeature = fromFeatures[id];
+
+      if (!fromFeature) {
+        animatedFeatures[id] = toFeature;
+        return;
+      }
+
+      const fromCoords = fromFeature.geometry.coordinates;
+      const toCoords = toFeature.geometry.coordinates;
+
+      const lng = interpolate(fromCoords[0], toCoords[0], easedProgress);
+      const lat = interpolate(fromCoords[1], toCoords[1], easedProgress);
+
+      animatedFeatures[id] = {
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [lng, lat]
+        },
+        properties: toFeature.properties
+      };
+    });
+
+    setMapSourceData(map, objectToFeatureCollection(animatedFeatures));
+
+    if (progress < 1) {
+      animationFrameId = requestAnimationFrame(step);
+    } else {
+      setMapSourceData(map, objectToFeatureCollection(toFeatures));
+      appLog("Ship animation completed");
+    }
+  }
+
+  animationFrameId = requestAnimationFrame(step);
+}
+
+function setMapSourceData(map, geojson) {
+  const source = map.getSource("ships-source");
+
+  if (source) {
+    source.setData(geojson);
+  }
+}
+
+function objectToFeatureCollection(featureObject) {
+  return {
+    type: "FeatureCollection",
+    features: Object.values(featureObject)
+  };
+}
+
+function interpolate(start, end, progress) {
+  return start + (end - start) * progress;
+}
+
+function easeInOutCubic(x) {
+  return x < 0.5
+    ? 4 * x * x * x
+    : 1 - Math.pow(-2 * x + 2, 3) / 2;
 }
 
 function getShipColor(type) {
