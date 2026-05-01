@@ -4,7 +4,6 @@ from fastapi.responses import FileResponse, JSONResponse
 import asyncio
 import json
 import os
-import random
 import time
 import websockets
 
@@ -18,10 +17,14 @@ app.add_middleware(
 )
 
 VESSEL_CACHE = {}
+STATIC_CACHE = {}
+
 AIS_STATUS = {
     "connected": False,
     "last_message_time": None,
     "message_count": 0,
+    "position_messages": 0,
+    "static_messages": 0,
     "error": None,
     "mode": "waiting"
 }
@@ -66,32 +69,29 @@ def get_ais_status():
 
 @app.get("/metrics")
 def metrics():
-    vessels = list(VESSEL_CACHE.values())
-
-    if not vessels:
-        return {
-            "total_ships": 0,
-            "tankers": 0,
-            "cargo": 0,
-            "anchored": 0,
-            "congestion": "Waiting for AIS data"
-        }
+    vessels = list_live_vessels()
 
     total = len(vessels)
-    tankers = len([v for v in vessels if v.get("type") == "Tanker"])
-    cargo = len([v for v in vessels if v.get("type") == "Cargo"])
+    tankers = len([v for v in vessels if v.get("category") == "Tanker"])
+    cargo = len([v for v in vessels if v.get("category") == "Cargo"])
+    tug = len([v for v in vessels if v.get("category") == "Tug / Service"])
+    passenger = len([v for v in vessels if v.get("category") == "Passenger"])
+    other = len([v for v in vessels if v.get("category") == "Other / Unknown"])
     anchored = len([v for v in vessels if v.get("speed", 0) < 1])
 
     congestion = "Low"
-    if total > 40:
-        congestion = "Medium"
     if total > 80:
+        congestion = "Medium"
+    if total > 150:
         congestion = "High"
 
     return {
         "total_ships": total,
         "tankers": tankers,
         "cargo": cargo,
+        "tug_service": tug,
+        "passenger": passenger,
+        "other_unknown": other,
         "anchored": anchored,
         "congestion": congestion
     }
@@ -99,9 +99,11 @@ def metrics():
 
 @app.get("/ships")
 def ships():
-    now = time.time()
+    return list_live_vessels()
 
-    # Keep only vessels seen in last 20 minutes
+
+def list_live_vessels():
+    now = time.time()
     live_vessels = []
     expired_keys = []
 
@@ -137,15 +139,22 @@ async def aisstream_worker():
                 subscription_message = {
                     "APIKey": api_key,
                     "BoundingBoxes": [SINGAPORE_BBOX],
-                    "FilterMessageTypes": ["PositionReport"]
+                    "FilterMessageTypes": [
+                        "PositionReport",
+                        "ShipStaticData"
+                    ]
                 }
 
                 await websocket.send(json.dumps(subscription_message))
 
                 while True:
                     raw_message = await websocket.recv()
+
                     AIS_STATUS["message_count"] += 1
-                    AIS_STATUS["last_message_time"] = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
+                    AIS_STATUS["last_message_time"] = time.strftime(
+                        "%Y-%m-%d %H:%M:%S UTC",
+                        time.gmtime()
+                    )
 
                     try:
                         message = json.loads(raw_message)
@@ -161,62 +170,166 @@ async def aisstream_worker():
 
 
 def process_ais_message(message):
-    if message.get("MessageType") != "PositionReport":
+    message_type = message.get("MessageType")
+
+    if message_type == "ShipStaticData":
+        AIS_STATUS["static_messages"] += 1
+        process_static_message(message)
         return
 
+    if message_type == "PositionReport":
+        AIS_STATUS["position_messages"] += 1
+        process_position_message(message)
+        return
+
+
+def process_static_message(message):
+    metadata = message.get("MetaData", {})
+    static_data = message.get("Message", {}).get("ShipStaticData", {})
+
+    mmsi = get_mmsi(metadata, static_data)
+    if not mmsi:
+        return
+
+    ship_name = (
+        metadata.get("ShipName")
+        or static_data.get("Name")
+        or static_data.get("ShipName")
+        or f"MMSI {mmsi}"
+    )
+
+    ship_type_code = (
+        static_data.get("Type")
+        or static_data.get("ShipType")
+        or static_data.get("TypeAndCargo")
+    )
+
+    category = map_ais_ship_type(ship_type_code, ship_name)
+
+    STATIC_CACHE[mmsi] = {
+        "mmsi": mmsi,
+        "name": clean_text(ship_name),
+        "ship_type_code": ship_type_code,
+        "category": category,
+        "last_static_seen": AIS_STATUS["last_message_time"]
+    }
+
+    if mmsi in VESSEL_CACHE:
+        VESSEL_CACHE[mmsi]["name"] = STATIC_CACHE[mmsi]["name"]
+        VESSEL_CACHE[mmsi]["ship_type_code"] = ship_type_code
+        VESSEL_CACHE[mmsi]["category"] = category
+
+
+def process_position_message(message):
     metadata = message.get("MetaData", {})
     position = message.get("Message", {}).get("PositionReport", {})
 
-    lat = metadata.get("latitude")
-    lng = metadata.get("longitude")
+    lat = metadata.get("latitude") or position.get("Latitude")
+    lng = metadata.get("longitude") or position.get("Longitude")
 
     if lat is None or lng is None:
         return
 
+    lat = float(lat)
+    lng = float(lng)
+
     if not (1.10 <= lat <= 1.35 and 103.50 <= lng <= 104.15):
         return
 
-    mmsi = str(metadata.get("MMSI") or metadata.get("MMSI_String") or position.get("UserID") or random.randint(100000000, 999999999))
+    mmsi = get_mmsi(metadata, position)
+    if not mmsi:
+        return
 
-    ship_name = metadata.get("ShipName")
-    if not ship_name:
-        ship_name = f"MMSI {mmsi}"
-    ship_name = ship_name.strip()
+    static = STATIC_CACHE.get(mmsi, {})
+
+    ship_name = (
+        static.get("name")
+        or metadata.get("ShipName")
+        or f"MMSI {mmsi}"
+    )
 
     speed = position.get("Sog")
     if speed is None:
-        speed = 0
+        speed = position.get("SpeedOverGround", 0)
 
     heading = position.get("TrueHeading")
-    if heading is None:
+    if heading is None or heading == 511:
         heading = position.get("Cog", 0)
 
-    vessel_type = infer_vessel_type(ship_name)
+    category = static.get("category") or map_ais_ship_type(None, ship_name)
+    ship_type_code = static.get("ship_type_code")
 
     VESSEL_CACHE[mmsi] = {
         "mmsi": mmsi,
-        "name": ship_name,
-        "lat": round(float(lat), 6),
-        "lng": round(float(lng), 6),
-        "speed": round(float(speed), 1),
-        "heading": round(float(heading), 1),
-        "type": vessel_type,
+        "name": clean_text(ship_name),
+        "lat": round(lat, 6),
+        "lng": round(lng, 6),
+        "speed": round(float(speed or 0), 1),
+        "heading": round(float(heading or 0), 1),
+        "ship_type_code": ship_type_code,
+        "category": category,
         "last_seen": AIS_STATUS["last_message_time"],
         "last_seen_epoch": time.time(),
         "source": "AISStream"
     }
 
 
-def infer_vessel_type(ship_name):
-    name = ship_name.upper()
+def get_mmsi(metadata, payload):
+    value = (
+        metadata.get("MMSI")
+        or metadata.get("MMSI_String")
+        or payload.get("UserID")
+        or payload.get("MMSI")
+    )
 
-    if "TANKER" in name or "OIL" in name or "LNG" in name or "LPG" in name:
+    if value is None:
+        return None
+
+    return str(value)
+
+
+def clean_text(value):
+    if not value:
+        return "Unknown vessel"
+
+    return str(value).strip()
+
+
+def map_ais_ship_type(ship_type_code, ship_name):
+    name = str(ship_name or "").upper()
+
+    if ship_type_code is not None:
+        try:
+            code = int(ship_type_code)
+
+            if 30 <= code <= 39:
+                return "Tug / Service"
+
+            if 50 <= code <= 59:
+                return "Tug / Service"
+
+            if 60 <= code <= 69:
+                return "Passenger"
+
+            if 70 <= code <= 79:
+                return "Cargo"
+
+            if 80 <= code <= 89:
+                return "Tanker"
+
+        except Exception:
+            pass
+
+    if "TANKER" in name or "LNG" in name or "LPG" in name or "OIL" in name or "CHEM" in name:
         return "Tanker"
 
-    if "CARGO" in name or "CONTAINER" in name or "MAERSK" in name or "MSC" in name or "EVER" in name:
+    if "MAERSK" in name or "MSC" in name or "CARGO" in name or "CONTAINER" in name or "EVER" in name:
         return "Cargo"
 
-    if "TUG" in name or "TOW" in name:
-        return "Tug"
+    if "TUG" in name or "TOW" in name or "PILOT" in name or "SUPPLY" in name:
+        return "Tug / Service"
 
-    return "Passenger"
+    if "FERRY" in name or "CRUISE" in name or "PASSENGER" in name:
+        return "Passenger"
+
+    return "Other / Unknown"

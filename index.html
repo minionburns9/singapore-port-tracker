@@ -29,7 +29,7 @@
     }
 
     #sidebar {
-      width: 340px;
+      width: 350px;
       height: 100vh;
       background: #0a1626;
       padding: 16px;
@@ -52,6 +52,7 @@
       color: #9fb3c8;
       margin-bottom: 16px;
       font-size: 13px;
+      line-height: 1.4;
     }
 
     .card {
@@ -70,6 +71,7 @@
     .metric {
       display: flex;
       justify-content: space-between;
+      gap: 12px;
       padding: 5px 0;
       font-size: 13px;
       border-bottom: 1px solid rgba(255,255,255,0.08);
@@ -79,29 +81,42 @@
 
     .metric strong {
       color: #79d7ff;
+      text-align: right;
     }
 
     .legend {
       display: flex;
       align-items: center;
       font-size: 13px;
-      margin: 5px 0;
+      margin: 6px 0;
     }
 
-    .dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      margin-right: 6px;
-      border: 1px solid #fff;
+    .symbol {
+      width: 22px;
+      display: inline-block;
+      font-size: 16px;
+      font-weight: bold;
+      margin-right: 8px;
+      text-align: center;
     }
 
-    .cargo { background: #3aa0ff; }
-    .tanker { background: #ff4d4d; }
-    .tug { background: #ffd166; }
-    .passenger { background: #9dff7a; }
+    .cargo { color: #3aa0ff; }
+    .tanker { color: #ff4d4d; }
+    .tug { color: #ffd166; }
+    .passenger { color: #b86cff; }
+    .unknown { color: #9dff7a; }
 
-    /* MOBILE MODE */
+    .note {
+      color: #b8c7d6;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .mapboxgl-popup-content {
+      color: #111111;
+      font-size: 13px;
+    }
+
     @media (max-width: 768px) {
       #appShell {
         flex-direction: column;
@@ -109,21 +124,16 @@
 
       #sidebar {
         width: 100%;
+        max-height: 270px;
         height: auto;
-        max-height: 260px;
-        overflow-y: auto;
       }
 
       #map {
-        height: calc(100vh - 260px);
+        height: calc(100vh - 270px);
       }
 
       h1 {
         font-size: 18px;
-      }
-
-      .subtitle {
-        font-size: 12px;
       }
     }
   </style>
@@ -131,17 +141,19 @@
 
 <body>
   <div id="appShell">
-
     <div id="sidebar">
       <h1>Singapore Port Tracker</h1>
-      <div class="subtitle">Live AISStream vessel traffic</div>
+      <div class="subtitle">Live AISStream vessel traffic for Singapore Strait</div>
 
       <div class="card">
         <h2>Live Metrics</h2>
         <div class="metric"><span>Total Ships</span><strong id="total_ships">-</strong></div>
         <div class="metric"><span>Tankers</span><strong id="tankers">-</strong></div>
         <div class="metric"><span>Cargo</span><strong id="cargo">-</strong></div>
-        <div class="metric"><span>Anchored</span><strong id="anchored">-</strong></div>
+        <div class="metric"><span>Tug / Service</span><strong id="tug_service">-</strong></div>
+        <div class="metric"><span>Passenger</span><strong id="passenger">-</strong></div>
+        <div class="metric"><span>Other / Unknown</span><strong id="other_unknown">-</strong></div>
+        <div class="metric"><span>Anchored / Slow</span><strong id="anchored">-</strong></div>
         <div class="metric"><span>Congestion</span><strong id="congestion">-</strong></div>
       </div>
 
@@ -149,22 +161,32 @@
         <h2>AISStream</h2>
         <div class="metric"><span>Status</span><strong id="ais_mode">-</strong></div>
         <div class="metric"><span>Connected</span><strong id="ais_connected">-</strong></div>
-        <div class="metric"><span>Messages</span><strong id="ais_messages">-</strong></div>
+        <div class="metric"><span>Total Msgs</span><strong id="ais_messages">-</strong></div>
+        <div class="metric"><span>Position Msgs</span><strong id="ais_position_messages">-</strong></div>
+        <div class="metric"><span>Static Msgs</span><strong id="ais_static_messages">-</strong></div>
       </div>
 
       <div class="card">
         <h2>Legend</h2>
-        <div class="legend"><span class="dot cargo"></span>Cargo</div>
-        <div class="legend"><span class="dot tanker"></span>Tanker</div>
-        <div class="legend"><span class="dot tug"></span>Tug</div>
-        <div class="legend"><span class="dot passenger"></span>Other</div>
+        <div class="legend"><span class="symbol cargo">■</span>Cargo</div>
+        <div class="legend"><span class="symbol tanker">▲</span>Tanker</div>
+        <div class="legend"><span class="symbol tug">★</span>Tug / Service</div>
+        <div class="legend"><span class="symbol passenger">◆</span>Passenger</div>
+        <div class="legend"><span class="symbol unknown">●</span>Other / Unknown</div>
+      </div>
+
+      <div class="card">
+        <h2>Data note</h2>
+        <div class="note">
+          Vessel category is mapped from AIS ship static data where available.
+          Until static data arrives for a vessel, it is shown as Other / Unknown.
+        </div>
       </div>
     </div>
 
     <div id="map"></div>
-
   </div>
 
-  <script src="/app.js"></script>
+  <script src="/app.js?v=40"></script>
 </body>
 </html>
