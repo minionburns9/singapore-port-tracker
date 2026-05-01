@@ -35,3 +35,11 @@ def ships():
             "lng": random.uniform(103.5,104.1)
         })
     return data
+
+import os
+
+@app.get("/config")
+def get_config():
+    return {
+        "mapbox_token": os.getenv("MAPBOX_TOKEN")
+    }
