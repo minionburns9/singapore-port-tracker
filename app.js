@@ -55,4 +55,4 @@ async function loadShips() {
 }
 
 loadMetrics();
-loadShips();
+loadShips(); 
