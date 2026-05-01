@@ -1,3 +1,7 @@
+let previousFeatures = {};
+let currentFeatures = {};
+let animationFrameId = null;
+
 async function initApp() {
   const configResponse = await fetch("/config");
   const config = await configResponse.json();
@@ -24,19 +28,19 @@ async function initApp() {
       type: "circle",
       source: "ships-source",
       paint: {
-        "circle-radius": 14,
+        "circle-radius": 16,
         "circle-color": ["get", "color"],
-        "circle-opacity": 0.20,
-        "circle-blur": 0.9
+        "circle-opacity": 0.16,
+        "circle-blur": 0.8
       }
     });
 
     map.addLayer({
-      id: "ships-symbols",
+      id: "ship-direction-arrows",
       type: "symbol",
       source: "ships-source",
       layout: {
-        "text-field": ["get", "shape"],
+        "text-field": "➤",
         "text-size": [
           "interpolate",
           ["linear"],
@@ -45,42 +49,57 @@ async function initApp() {
           11, 18,
           14, 24
         ],
+        "text-rotate": ["get", "heading"],
+        "text-allow-overlap": true,
+        "text-ignore-placement": true
+      },
+      paint: {
+        "text-color": ["get", "color"],
+        "text-halo-color": "#000000",
+        "text-halo-width": 1.5,
+        "text-opacity": 0.95
+      }
+    });
+
+    map.addLayer({
+      id: "ship-category-symbols",
+      type: "symbol",
+      source: "ships-source",
+      layout: {
+        "text-field": ["get", "shape"],
+        "text-size": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          8, 10,
+          11, 15,
+          14, 20
+        ],
+        "text-offset": [0, 0.85],
         "text-allow-overlap": true,
         "text-ignore-placement": true
       },
       paint: {
         "text-color": ["get", "color"],
         "text-halo-color": "#ffffff",
-        "text-halo-width": 1.2,
+        "text-halo-width": 1.1,
         "text-opacity": 0.98
       }
     });
 
-    map.on("click", "ships-symbols", function (event) {
-      const feature = event.features[0];
-      const props = feature.properties;
-      const coords = feature.geometry.coordinates.slice();
-
-      new mapboxgl.Popup()
-        .setLngLat(coords)
-        .setHTML(`
-          <strong>${props.name}</strong><br>
-          MMSI: ${props.mmsi}<br>
-          Category: ${props.category}<br>
-          AIS Type Code: ${props.ship_type_code || "unknown"}<br>
-          Speed: ${props.speed} knots<br>
-          Heading: ${props.heading}°<br>
-          Source: ${props.source}<br>
-          Last seen: ${props.last_seen}
-        `)
-        .addTo(map);
+    map.on("click", "ship-direction-arrows", function (event) {
+      showShipPopup(map, event);
     });
 
-    map.on("mouseenter", "ships-symbols", function () {
+    map.on("click", "ship-category-symbols", function (event) {
+      showShipPopup(map, event);
+    });
+
+    map.on("mouseenter", "ship-direction-arrows", function () {
       map.getCanvas().style.cursor = "pointer";
     });
 
-    map.on("mouseleave", "ships-symbols", function () {
+    map.on("mouseleave", "ship-direction-arrows", function () {
       map.getCanvas().style.cursor = "";
     });
 
@@ -95,7 +114,7 @@ async function initApp() {
 async function refreshAll(map) {
   await loadMetrics();
   await loadStatus();
-  await loadShips(map);
+  await loadShipsAnimated(map);
 }
 
 async function loadMetrics() {
@@ -123,39 +142,151 @@ async function loadStatus() {
   document.getElementById("ais_static_messages").innerText = data.static_messages || 0;
 }
 
-async function loadShips(map) {
+async function loadShipsAnimated(map) {
   const res = await fetch("/ships");
   const ships = await res.json();
 
-  const geojson = {
-    type: "FeatureCollection",
-    features: ships.map(function (ship) {
-      return {
+  const nextFeatures = {};
+
+  ships.forEach(function (ship) {
+    const id = String(ship.mmsi || ship.name);
+
+    nextFeatures[id] = {
+      type: "Feature",
+      geometry: {
+        type: "Point",
+        coordinates: [ship.lng, ship.lat]
+      },
+      properties: {
+        id: id,
+        mmsi: ship.mmsi || "-",
+        name: ship.name || "Unknown vessel",
+        category: ship.category || "Other / Unknown",
+        ship_type_code: ship.ship_type_code || "",
+        speed: ship.speed || 0,
+        heading: normalizeHeading(ship.heading || 0),
+        last_seen: ship.last_seen || "-",
+        source: ship.source || "AISStream",
+        color: getColor(ship.category),
+        shape: getShape(ship.category)
+      }
+    };
+  });
+
+  if (Object.keys(currentFeatures).length === 0) {
+    currentFeatures = nextFeatures;
+    setSourceData(map, currentFeatures);
+    return;
+  }
+
+  previousFeatures = currentFeatures;
+  currentFeatures = nextFeatures;
+
+  animateTransition(map, previousFeatures, currentFeatures, 9000);
+}
+
+function animateTransition(map, fromFeatures, toFeatures, durationMs) {
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId);
+  }
+
+  const startTime = performance.now();
+
+  function step(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / durationMs, 1);
+    const eased = easeInOutCubic(progress);
+
+    const frameFeatures = {};
+
+    Object.keys(toFeatures).forEach(function (id) {
+      const toFeature = toFeatures[id];
+      const fromFeature = fromFeatures[id];
+
+      if (!fromFeature) {
+        frameFeatures[id] = toFeature;
+        return;
+      }
+
+      const fromCoords = fromFeature.geometry.coordinates;
+      const toCoords = toFeature.geometry.coordinates;
+
+      const lng = interpolate(fromCoords[0], toCoords[0], eased);
+      const lat = interpolate(fromCoords[1], toCoords[1], eased);
+
+      frameFeatures[id] = {
         type: "Feature",
         geometry: {
           type: "Point",
-          coordinates: [ship.lng, ship.lat]
+          coordinates: [lng, lat]
         },
-        properties: {
-          mmsi: ship.mmsi || "-",
-          name: ship.name || "Unknown vessel",
-          category: ship.category || "Other / Unknown",
-          ship_type_code: ship.ship_type_code || "",
-          speed: ship.speed || 0,
-          heading: ship.heading || 0,
-          last_seen: ship.last_seen || "-",
-          source: ship.source || "AISStream",
-          color: getColor(ship.category),
-          shape: getShape(ship.category)
-        }
+        properties: toFeature.properties
       };
-    })
-  };
+    });
 
-  const source = map.getSource("ships-source");
-  if (source) {
-    source.setData(geojson);
+    setSourceData(map, frameFeatures);
+
+    if (progress < 1) {
+      animationFrameId = requestAnimationFrame(step);
+    } else {
+      setSourceData(map, toFeatures);
+    }
   }
+
+  animationFrameId = requestAnimationFrame(step);
+}
+
+function showShipPopup(map, event) {
+  const feature = event.features[0];
+  const props = feature.properties;
+  const coords = feature.geometry.coordinates.slice();
+
+  new mapboxgl.Popup()
+    .setLngLat(coords)
+    .setHTML(`
+      <strong>${props.name}</strong><br>
+      MMSI: ${props.mmsi}<br>
+      Category: ${props.category}<br>
+      AIS Type Code: ${props.ship_type_code || "unknown"}<br>
+      Speed: ${props.speed} knots<br>
+      Heading: ${props.heading}°<br>
+      Source: ${props.source}<br>
+      Last seen: ${props.last_seen}
+    `)
+    .addTo(map);
+}
+
+function setSourceData(map, featureObject) {
+  const source = map.getSource("ships-source");
+
+  if (!source) {
+    return;
+  }
+
+  source.setData({
+    type: "FeatureCollection",
+    features: Object.values(featureObject)
+  });
+}
+
+function interpolate(start, end, progress) {
+  return start + (end - start) * progress;
+}
+
+function easeInOutCubic(x) {
+  return x < 0.5
+    ? 4 * x * x * x
+    : 1 - Math.pow(-2 * x + 2, 3) / 2;
+}
+
+function normalizeHeading(heading) {
+  const value = Number(heading);
+
+  if (Number.isNaN(value)) {
+    return 0;
+  }
+
+  return value % 360;
 }
 
 function getColor(category) {

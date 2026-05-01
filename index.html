@@ -105,6 +105,7 @@
     .tug { color: #ffd166; }
     .passenger { color: #b86cff; }
     .unknown { color: #9dff7a; }
+    .direction { color: #ffffff; }
 
     .note {
       color: #b8c7d6;
@@ -168,6 +169,7 @@
 
       <div class="card">
         <h2>Legend</h2>
+        <div class="legend"><span class="symbol direction">➤</span>Heading / direction</div>
         <div class="legend"><span class="symbol cargo">■</span>Cargo</div>
         <div class="legend"><span class="symbol tanker">▲</span>Tanker</div>
         <div class="legend"><span class="symbol tug">★</span>Tug / Service</div>
@@ -178,8 +180,7 @@
       <div class="card">
         <h2>Data note</h2>
         <div class="note">
-          Vessel category is mapped from AIS ship static data where available.
-          Until static data arrives for a vessel, it is shown as Other / Unknown.
+          Arrows show AIS-reported heading. Vessel type comes from AIS static data when available.
         </div>
       </div>
     </div>
@@ -187,6 +188,6 @@
     <div id="map"></div>
   </div>
 
-  <script src="/app.js?v=40"></script>
+  <script src="/app.js?v=50"></script>
 </body>
 </html>
