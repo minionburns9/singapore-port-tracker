@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 import random
 import os
 
@@ -16,24 +16,24 @@ app.add_middleware(
 
 @app.get("/")
 def serve_index():
-    return FileResponse("index.html")
+    return FileResponse("index.html", media_type="text/html")
 
 
 @app.get("/style.css")
 def serve_css():
-    return FileResponse("style.css")
+    return FileResponse("style.css", media_type="text/css")
 
 
 @app.get("/app.js")
 def serve_js():
-    return FileResponse("app.js")
+    return FileResponse("app.js", media_type="application/javascript")
 
 
 @app.get("/config")
 def get_config():
-    return {
+    return JSONResponse({
         "mapbox_token": os.getenv("MAPBOX_TOKEN")
-    }
+    })
 
 
 @app.get("/health")

@@ -4,7 +4,7 @@ async function initApp() {
 
   if (!config.mapbox_token) {
     document.getElementById("map").innerHTML =
-      "<div class='error-box'>Mapbox token missing. Add MAPBOX_TOKEN in Render Environment Variables.</div>";
+      "<div class='error-box'>Mapbox token missing. Add MAPBOX_TOKEN in Render Environment Variables and redeploy.</div>";
     return;
   }
 

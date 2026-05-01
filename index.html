@@ -6,13 +6,32 @@
 
   <title>Singapore Port Tracker</title>
 
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style.css?v=3">
 
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.js"></script>
   <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.css" rel="stylesheet">
+
+  <style>
+    #logBox {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 180px;
+      background: #000;
+      color: #00ff9c;
+      font-family: monospace;
+      font-size: 12px;
+      overflow-y: auto;
+      padding: 10px;
+      z-index: 9999;
+      border-top: 2px solid #00ff9c;
+    }
+  </style>
 </head>
 
 <body>
+
   <div id="sidebar">
     <h1>Singapore Port Tracker</h1>
     <p class="subtitle">Singapore Strait vessel traffic prototype</p>
@@ -27,21 +46,61 @@
     </div>
 
     <div class="card">
-      <h2>Legend</h2>
-      <div class="legend"><span class="dot cargo"></span>Cargo</div>
-      <div class="legend"><span class="dot tanker"></span>Tanker</div>
-      <div class="legend"><span class="dot tug"></span>Tug</div>
-      <div class="legend"><span class="dot passenger"></span>Passenger / Other</div>
-    </div>
-
-    <div class="card">
       <h2>Status</h2>
-      <p>Base version using simulated vessel data. Real AIS data will be added later.</p>
+      <p>Debug logging enabled below.</p>
     </div>
   </div>
 
   <div id="map"></div>
 
-  <script src="/app.js"></script>
+  <!-- LOG BOX -->
+  <div id="logBox"></div>
+
+  <!-- LOGGING SCRIPT -->
+  <script>
+    const logBox = document.getElementById("logBox");
+
+    function log(msg) {
+      const time = new Date().toLocaleTimeString();
+      const line = `[${time}] ${msg}`;
+      console.log(line);
+      logBox.innerHTML += line + "<br>";
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    log("Page loaded");
+
+    window.onerror = function (msg, url, line, col, error) {
+      log("ERROR: " + msg);
+    };
+
+    window.addEventListener("unhandledrejection", function (event) {
+      log("PROMISE ERROR: " + event.reason);
+    });
+
+    // Check Mapbox loaded
+    if (typeof mapboxgl === "undefined") {
+      log("Mapbox library FAILED to load");
+    } else {
+      log("Mapbox library loaded");
+    }
+
+    // Test config endpoint
+    fetch("/config")
+      .then(res => res.json())
+      .then(data => {
+        if (!data.mapbox_token) {
+          log("Mapbox token MISSING from /config");
+        } else {
+          log("Mapbox token RECEIVED");
+        }
+      })
+      .catch(err => {
+        log("Config fetch FAILED: " + err);
+      });
+  </script>
+
+  <script src="/app.js?v=3"></script>
+
 </body>
 </html>
