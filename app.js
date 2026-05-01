@@ -2,6 +2,7 @@ let previousFeatures = {};
 let currentFeatures = {};
 let trailHistory = {};
 let animationFrameId = null;
+let routePulseFrameId = null;
 
 const SEA_ROUTES = [
   {
@@ -93,151 +94,22 @@ async function initApp() {
     container: "map",
     style: "mapbox://styles/mapbox/satellite-streets-v12",
     center: [103.82, 1.23],
-    zoom: 10.2
+    zoom: 6.5
   });
 
   map.addControl(new mapboxgl.NavigationControl(), "bottom-right");
 
   map.on("load", async function () {
     addSeaRouteLayers(map);
-
-    map.addSource("ships-source", {
-      type: "geojson",
-      data: emptyFeatureCollection()
-    });
-
-    map.addSource("trails-source", {
-      type: "geojson",
-      data: emptyFeatureCollection()
-    });
-
-    map.addSource("projection-source", {
-      type: "geojson",
-      data: emptyFeatureCollection()
-    });
-
-    map.addLayer({
-      id: "ship-trails",
-      type: "line",
-      source: "trails-source",
-      paint: {
-        "line-color": ["get", "color"],
-        "line-width": 2,
-        "line-opacity": 0.55
-      }
-    });
-
-    map.addLayer({
-      id: "ship-projections",
-      type: "line",
-      source: "projection-source",
-      paint: {
-        "line-color": ["get", "color"],
-        "line-width": 2,
-        "line-opacity": 0.75,
-        "line-dasharray": [2, 2]
-      }
-    });
-
-    map.addLayer({
-      id: "ships-glow",
-      type: "circle",
-      source: "ships-source",
-      paint: {
-        "circle-radius": 18,
-        "circle-color": ["get", "color"],
-        "circle-opacity": 0.16,
-        "circle-blur": 0.85
-      }
-    });
-
-    map.addLayer({
-      id: "ship-direction-arrows",
-      type: "symbol",
-      source: "ships-source",
-      layout: {
-        "text-field": "➤",
-        "text-size": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          8, 14,
-          11, 22,
-          14, 30
-        ],
-        "text-rotate": ["get", "heading"],
-        "text-allow-overlap": true,
-        "text-ignore-placement": true
-      },
-      paint: {
-        "text-color": ["get", "color"],
-        "text-halo-color": "#000000",
-        "text-halo-width": 1.8,
-        "text-opacity": 0.98
-      }
-    });
-
-    map.addLayer({
-      id: "ship-category-symbols",
-      type: "symbol",
-      source: "ships-source",
-      layout: {
-        "text-field": ["get", "shape"],
-        "text-size": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          8, 9,
-          11, 14,
-          14, 19
-        ],
-        "text-offset": [0, 1],
-        "text-allow-overlap": true,
-        "text-ignore-placement": true
-      },
-      paint: {
-        "text-color": ["get", "color"],
-        "text-halo-color": "#ffffff",
-        "text-halo-width": 1.1,
-        "text-opacity": 0.95
-      }
-    });
-
-    map.on("click", "ship-direction-arrows", function (event) {
-      showShipPopup(map, event);
-    });
-
-    map.on("click", "ship-category-symbols", function (event) {
-      showShipPopup(map, event);
-    });
-
-    map.on("mouseenter", "ship-direction-arrows", function () {
-      map.getCanvas().style.cursor = "pointer";
-    });
-
-    map.on("mouseleave", "ship-direction-arrows", function () {
-      map.getCanvas().style.cursor = "";
-    });
-
-    map.on("click", "sea-route-lines", function (event) {
-      const props = event.features[0].properties;
-      const coords = event.lngLat;
-
-      new mapboxgl.Popup()
-        .setLngLat(coords)
-        .setHTML(`
-          <strong>${props.name}</strong><br>
-          Route type: SEA shipping corridor<br>
-          Note: illustrative macro-route overlay
-        `)
-        .addTo(map);
-    });
+    addShipLayers(map);
 
     await refreshAll(map);
 
     setInterval(async function () {
       await refreshAll(map);
     }, 10000);
+
+    startRoutePulseAnimation(map);
   });
 }
 
@@ -258,6 +130,7 @@ function addSeaRouteLayers(map) {
   });
 
   const routeArrowFeatures = [];
+  const routeLabelFeatures = [];
 
   SEA_ROUTES.forEach(function (route) {
     for (let i = 1; i < route.coordinates.length; i++) {
@@ -278,23 +151,19 @@ function addSeaRouteLayers(map) {
         }
       });
     }
-  });
 
-  const routeLabelFeatures = SEA_ROUTES.map(function (route) {
-    const middleIndex = Math.floor(route.coordinates.length / 2);
-
-    return {
+    routeLabelFeatures.push({
       type: "Feature",
       geometry: {
         type: "Point",
-        coordinates: route.coordinates[middleIndex]
+        coordinates: route.coordinates[Math.floor(route.coordinates.length / 2)]
       },
       properties: {
         id: route.id,
         name: route.name,
         color: route.color
       }
-    };
+    });
   });
 
   map.addSource("sea-routes-source", {
@@ -321,6 +190,11 @@ function addSeaRouteLayers(map) {
     }
   });
 
+  map.addSource("route-pulses-source", {
+    type: "geojson",
+    data: emptyFeatureCollection()
+  });
+
   map.addLayer({
     id: "sea-route-glow",
     type: "line",
@@ -331,12 +205,12 @@ function addSeaRouteLayers(map) {
         "interpolate",
         ["linear"],
         ["zoom"],
-        5, 5,
-        10, 10,
-        13, 14
+        5, 6,
+        10, 12,
+        13, 16
       ],
       "line-opacity": 0.18,
-      "line-blur": 4
+      "line-blur": 5
     }
   });
 
@@ -354,7 +228,7 @@ function addSeaRouteLayers(map) {
         10, 3,
         13, 5
       ],
-      "line-opacity": 0.72
+      "line-opacity": 0.68
     }
   });
 
@@ -385,17 +259,56 @@ function addSeaRouteLayers(map) {
   });
 
   map.addLayer({
+    id: "route-pulses-glow",
+    type: "circle",
+    source: "route-pulses-source",
+    paint: {
+      "circle-radius": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        5, 8,
+        10, 13,
+        13, 18
+      ],
+      "circle-color": ["get", "color"],
+      "circle-opacity": 0.24,
+      "circle-blur": 0.85
+    }
+  });
+
+  map.addLayer({
+    id: "route-pulses",
+    type: "circle",
+    source: "route-pulses-source",
+    paint: {
+      "circle-radius": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        5, 3,
+        10, 5,
+        13, 7
+      ],
+      "circle-color": ["get", "color"],
+      "circle-stroke-width": 1,
+      "circle-stroke-color": "#ffffff",
+      "circle-opacity": 0.95
+    }
+  });
+
+  map.addLayer({
     id: "sea-route-labels",
     type: "symbol",
     source: "sea-route-labels-source",
-    minzoom: 6,
+    minzoom: 5,
     layout: {
       "text-field": ["get", "name"],
       "text-size": [
         "interpolate",
         ["linear"],
         ["zoom"],
-        6, 10,
+        5, 10,
         10, 12,
         13, 15
       ],
@@ -410,6 +323,264 @@ function addSeaRouteLayers(map) {
       "text-opacity": 0.95
     }
   });
+
+  map.on("click", "sea-route-lines", function (event) {
+    const props = event.features[0].properties;
+
+    new mapboxgl.Popup()
+      .setLngLat(event.lngLat)
+      .setHTML(`
+        <strong>${props.name}</strong><br>
+        SEA shipping corridor overlay<br>
+        Animated pulse shows illustrative route flow
+      `)
+      .addTo(map);
+  });
+}
+
+function addShipLayers(map) {
+  map.addSource("ships-source", {
+    type: "geojson",
+    data: emptyFeatureCollection()
+  });
+
+  map.addSource("trails-source", {
+    type: "geojson",
+    data: emptyFeatureCollection()
+  });
+
+  map.addSource("projection-source", {
+    type: "geojson",
+    data: emptyFeatureCollection()
+  });
+
+  map.addLayer({
+    id: "ship-trails",
+    type: "line",
+    source: "trails-source",
+    paint: {
+      "line-color": ["get", "color"],
+      "line-width": 2,
+      "line-opacity": 0.55
+    }
+  });
+
+  map.addLayer({
+    id: "ship-projections",
+    type: "line",
+    source: "projection-source",
+    paint: {
+      "line-color": ["get", "color"],
+      "line-width": 2,
+      "line-opacity": 0.75,
+      "line-dasharray": [2, 2]
+    }
+  });
+
+  map.addLayer({
+    id: "ships-glow",
+    type: "circle",
+    source: "ships-source",
+    paint: {
+      "circle-radius": 18,
+      "circle-color": ["get", "color"],
+      "circle-opacity": 0.16,
+      "circle-blur": 0.85
+    }
+  });
+
+  map.addLayer({
+    id: "ship-direction-arrows",
+    type: "symbol",
+    source: "ships-source",
+    layout: {
+      "text-field": "➤",
+      "text-size": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        8, 14,
+        11, 22,
+        14, 30
+      ],
+      "text-rotate": ["get", "heading"],
+      "text-allow-overlap": true,
+      "text-ignore-placement": true
+    },
+    paint: {
+      "text-color": ["get", "color"],
+      "text-halo-color": "#000000",
+      "text-halo-width": 1.8,
+      "text-opacity": 0.98
+    }
+  });
+
+  map.addLayer({
+    id: "ship-category-symbols",
+    type: "symbol",
+    source: "ships-source",
+    layout: {
+      "text-field": ["get", "shape"],
+      "text-size": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        8, 9,
+        11, 14,
+        14, 19
+      ],
+      "text-offset": [0, 1],
+      "text-allow-overlap": true,
+      "text-ignore-placement": true
+    },
+    paint: {
+      "text-color": ["get", "color"],
+      "text-halo-color": "#ffffff",
+      "text-halo-width": 1.1,
+      "text-opacity": 0.95
+    }
+  });
+
+  map.on("click", "ship-direction-arrows", function (event) {
+    showShipPopup(map, event);
+  });
+
+  map.on("click", "ship-category-symbols", function (event) {
+    showShipPopup(map, event);
+  });
+
+  map.on("mouseenter", "ship-direction-arrows", function () {
+    map.getCanvas().style.cursor = "pointer";
+  });
+
+  map.on("mouseleave", "ship-direction-arrows", function () {
+    map.getCanvas().style.cursor = "";
+  });
+}
+
+function startRoutePulseAnimation(map) {
+  if (routePulseFrameId) {
+    cancelAnimationFrame(routePulseFrameId);
+  }
+
+  const routeDurationMs = 14000;
+  const pulsesPerRoute = 5;
+
+  function frame(now) {
+    const features = [];
+
+    SEA_ROUTES.forEach(function (route, routeIndex) {
+      for (let i = 0; i < pulsesPerRoute; i++) {
+        const stagger = i / pulsesPerRoute;
+        const routeOffset = routeIndex * 0.07;
+        const progress = ((now / routeDurationMs) + stagger + routeOffset) % 1;
+
+        const point = pointAlongRoute(route.coordinates, progress);
+        const bearing = bearingAlongRoute(route.coordinates, progress);
+
+        features.push({
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: point
+          },
+          properties: {
+            id: route.id + "-pulse-" + i,
+            route: route.name,
+            color: route.color,
+            bearing: bearing
+          }
+        });
+      }
+    });
+
+    const source = map.getSource("route-pulses-source");
+    if (source) {
+      source.setData({
+        type: "FeatureCollection",
+        features: features
+      });
+    }
+
+    routePulseFrameId = requestAnimationFrame(frame);
+  }
+
+  routePulseFrameId = requestAnimationFrame(frame);
+}
+
+function pointAlongRoute(coordinates, progress) {
+  const segments = [];
+
+  let totalDistance = 0;
+
+  for (let i = 1; i < coordinates.length; i++) {
+    const from = coordinates[i - 1];
+    const to = coordinates[i];
+    const dist = distanceBetween(from, to);
+
+    segments.push({
+      from: from,
+      to: to,
+      distance: dist
+    });
+
+    totalDistance += dist;
+  }
+
+  const targetDistance = totalDistance * progress;
+  let walked = 0;
+
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+
+    if (walked + segment.distance >= targetDistance) {
+      const segmentProgress = (targetDistance - walked) / segment.distance;
+
+      return [
+        interpolate(segment.from[0], segment.to[0], segmentProgress),
+        interpolate(segment.from[1], segment.to[1], segmentProgress)
+      ];
+    }
+
+    walked += segment.distance;
+  }
+
+  return coordinates[coordinates.length - 1];
+}
+
+function bearingAlongRoute(coordinates, progress) {
+  const segments = [];
+
+  let totalDistance = 0;
+
+  for (let i = 1; i < coordinates.length; i++) {
+    const from = coordinates[i - 1];
+    const to = coordinates[i];
+    const dist = distanceBetween(from, to);
+
+    segments.push({
+      from: from,
+      to: to,
+      distance: dist
+    });
+
+    totalDistance += dist;
+  }
+
+  const targetDistance = totalDistance * progress;
+  let walked = 0;
+
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+
+    if (walked + segment.distance >= targetDistance) {
+      return bearingBetween(segment.from, segment.to);
+    }
+
+    walked += segment.distance;
+  }
+
+  return 0;
 }
 
 async function refreshAll(map) {
@@ -590,6 +761,7 @@ function setTrailSourceData(map) {
   });
 
   const source = map.getSource("trails-source");
+
   if (source) {
     source.setData({
       type: "FeatureCollection",
@@ -631,6 +803,7 @@ function setProjectionSourceData(map, featureObject) {
   });
 
   const source = map.getSource("projection-source");
+
   if (source) {
     source.setData({
       type: "FeatureCollection",
@@ -726,6 +899,13 @@ function bearingBetween(from, to) {
   const bearing = Math.atan2(y, x) * 180 / Math.PI;
 
   return (bearing + 360) % 360;
+}
+
+function distanceBetween(from, to) {
+  const dx = to[0] - from[0];
+  const dy = to[1] - from[1];
+
+  return Math.sqrt(dx * dx + dy * dy);
 }
 
 function getColor(category) {
