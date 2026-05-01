@@ -1,8 +1,12 @@
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
-  font-family: Arial;
+  font-family: Arial, sans-serif;
   background: #07111f;
-  color: white;
+  color: #ffffff;
 }
 
 #sidebar {
@@ -10,34 +14,131 @@ body {
   left: 0;
   top: 0;
   bottom: 0;
-  width: 300px;
+  width: 320px;
   background: #0a1626;
   padding: 20px;
   z-index: 5;
+  overflow-y: auto;
+  box-shadow: 8px 0 25px rgba(0, 0, 0, 0.35);
 }
 
 #map {
   position: absolute;
-  left: 300px;
-  right: 0;
+  left: 320px;
   top: 0;
+  right: 0;
   bottom: 0;
+  background: #07111f;
+}
+
+h1 {
+  font-size: 24px;
+  margin: 0 0 6px;
+}
+
+.subtitle {
+  color: #9fb3c8;
+  margin: 0 0 20px;
+  line-height: 1.4;
 }
 
 .card {
   background: #13263c;
-  padding: 12px;
-  border-radius: 10px;
-  margin-top: 10px;
+  padding: 16px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
 }
 
-@media(max-width:800px){
+.card h2 {
+  font-size: 16px;
+  margin: 0 0 12px;
+  color: #9ed8ff;
+}
+
+.card p {
+  margin: 0;
+  line-height: 1.5;
+  color: #d8e6f3;
+}
+
+.metric {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.metric:last-child {
+  border-bottom: none;
+}
+
+.metric strong {
+  color: #79d7ff;
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  margin: 8px 0;
+  color: #d8e6f3;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  display: inline-block;
+  margin-right: 8px;
+  border: 1px solid #ffffff;
+}
+
+.cargo {
+  background: #3aa0ff;
+}
+
+.tanker {
+  background: #ff4d4d;
+}
+
+.tug {
+  background: #ffd166;
+}
+
+.passenger {
+  background: #9dff7a;
+}
+
+.ship-marker {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 1px solid #ffffff;
+}
+
+.mapboxgl-popup-content {
+  color: #111111;
+  font-size: 13px;
+}
+
+.error-box {
+  color: white;
+  background: #8b1e1e;
+  padding: 20px;
+  margin: 20px;
+  border-radius: 10px;
+  font-size: 16px;
+}
+
+@media (max-width: 800px) {
   #sidebar {
     width: 100%;
-    height: 200px;
+    height: 300px;
+    bottom: auto;
   }
+
   #map {
-    top: 200px;
     left: 0;
+    top: 300px;
   }
 }

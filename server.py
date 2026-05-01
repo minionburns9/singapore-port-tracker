@@ -13,9 +13,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# -------------------------
-# FRONTEND ROUTES
-# -------------------------
 
 @app.get("/")
 def serve_index():
@@ -32,20 +29,12 @@ def serve_js():
     return FileResponse("app.js")
 
 
-# -------------------------
-# CONFIG ROUTE
-# -------------------------
-
 @app.get("/config")
 def get_config():
     return {
         "mapbox_token": os.getenv("MAPBOX_TOKEN")
     }
 
-
-# -------------------------
-# API ROUTES
-# -------------------------
 
 @app.get("/health")
 def health_check():
@@ -70,11 +59,11 @@ def metrics():
 def ships():
     data = []
 
-    for i in range(50):
+    for i in range(60):
         data.append({
             "name": f"Vessel-{i + 1}",
-            "lat": round(random.uniform(1.1, 1.35), 6),
-            "lng": round(random.uniform(103.5, 104.1), 6),
+            "lat": round(random.uniform(1.10, 1.35), 6),
+            "lng": round(random.uniform(103.50, 104.10), 6),
             "speed": round(random.uniform(0, 18), 1),
             "type": random.choice(["Cargo", "Tanker", "Passenger", "Tug"])
         })

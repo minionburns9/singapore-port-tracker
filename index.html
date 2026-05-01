@@ -1,35 +1,47 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <title>Singapore Port Tracker</title>
 
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/style.css">
 
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.js"></script>
   <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.css" rel="stylesheet">
 </head>
 
 <body>
+  <div id="sidebar">
+    <h1>Singapore Port Tracker</h1>
+    <p class="subtitle">Singapore Strait vessel traffic prototype</p>
 
-<div id="sidebar">
-  <h1>Singapore Port Tracker</h1>
+    <div class="card">
+      <h2>Live Metrics</h2>
+      <div class="metric"><span>Total Ships</span><strong id="total_ships">-</strong></div>
+      <div class="metric"><span>Tankers</span><strong id="tankers">-</strong></div>
+      <div class="metric"><span>Cargo</span><strong id="cargo">-</strong></div>
+      <div class="metric"><span>Anchored</span><strong id="anchored">-</strong></div>
+      <div class="metric"><span>Congestion</span><strong id="congestion">-</strong></div>
+    </div>
 
-  <div class="card">
-    <h2>Metrics</h2>
-    <div>Total Ships: <span id="total_ships">-</span></div>
-    <div>Tankers: <span id="tankers">-</span></div>
-    <div>Cargo: <span id="cargo">-</span></div>
-    <div>Anchored: <span id="anchored">-</span></div>
-    <div>Congestion: <span id="congestion">-</span></div>
+    <div class="card">
+      <h2>Legend</h2>
+      <div class="legend"><span class="dot cargo"></span>Cargo</div>
+      <div class="legend"><span class="dot tanker"></span>Tanker</div>
+      <div class="legend"><span class="dot tug"></span>Tug</div>
+      <div class="legend"><span class="dot passenger"></span>Passenger / Other</div>
+    </div>
+
+    <div class="card">
+      <h2>Status</h2>
+      <p>Base version using simulated vessel data. Real AIS data will be added later.</p>
+    </div>
   </div>
-</div>
 
-<div id="map"></div>
+  <div id="map"></div>
 
-<script src="app.js"></script>
-
+  <script src="/app.js"></script>
 </body>
 </html>

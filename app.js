@@ -1,7 +1,12 @@
-async function initMap() {
+async function initApp() {
+  const configResponse = await fetch("/config");
+  const config = await configResponse.json();
 
-  const configRes = await fetch("/config");
-  const config = await configRes.json();
+  if (!config.mapbox_token) {
+    document.getElementById("map").innerHTML =
+      "<div class='error-box'>Mapbox token missing. Add MAPBOX_TOKEN in Render Environment Variables.</div>";
+    return;
+  }
 
   mapboxgl.accessToken = config.mapbox_token;
 
@@ -11,6 +16,8 @@ async function initMap() {
     center: [103.82, 1.25],
     zoom: 9.5
   });
+
+  map.addControl(new mapboxgl.NavigationControl(), "bottom-right");
 
   async function loadMetrics() {
     const res = await fetch("/metrics");
@@ -27,61 +34,36 @@ async function initMap() {
     const res = await fetch("/ships");
     const ships = await res.json();
 
-    ships.forEach(ship => {
+    ships.forEach((ship) => {
+      const color =
+        ship.type === "Tanker" ? "#ff4d4d" :
+        ship.type === "Cargo" ? "#3aa0ff" :
+        ship.type === "Tug" ? "#ffd166" :
+        "#9dff7a";
+
       const el = document.createElement("div");
-      el.style.width = "10px";
-      el.style.height = "10px";
-      el.style.background = "red";
-      el.style.borderRadius = "50%";
+      el.className = "ship-marker";
+      el.style.background = color;
+      el.style.boxShadow = `0 0 10px ${color}`;
 
       new mapboxgl.Marker(el)
         .setLngLat([ship.lng, ship.lat])
+        .setPopup(
+          new mapboxgl.Popup().setHTML(`
+            <strong>${ship.name}</strong><br>
+            Type: ${ship.type}<br>
+            Speed: ${ship.speed} knots
+          `)
+        )
         .addTo(map);
     });
   }
 
-  loadMetrics();
-  loadShips();
-}
+  await loadMetrics();
 
-initMap();
-
-const API_BASE = "https://singapore-port-tracker.onrender.com";
-
-const map = new mapboxgl.Map({
-  container: "map",
-  style: "mapbox://styles/mapbox/dark-v11",
-  center: [103.82, 1.25],
-  zoom: 9.5
-});
-
-async function loadMetrics() {
-  const res = await fetch(API_BASE + "/metrics");
-  const data = await res.json();
-
-  document.getElementById("total_ships").innerText = data.total_ships;
-  document.getElementById("tankers").innerText = data.tankers;
-  document.getElementById("cargo").innerText = data.cargo;
-  document.getElementById("anchored").innerText = data.anchored;
-  document.getElementById("congestion").innerText = data.congestion;
-}
-
-async function loadShips() {
-  const res = await fetch(API_BASE + "/ships");
-  const ships = await res.json();
-
-  ships.forEach(ship => {
-    const el = document.createElement("div");
-    el.style.width = "10px";
-    el.style.height = "10px";
-    el.style.background = "red";
-    el.style.borderRadius = "50%";
-
-    new mapboxgl.Marker(el)
-      .setLngLat([ship.lng, ship.lat])
-      .addTo(map);
+  map.on("load", async () => {
+    await loadShips();
   });
 }
 
-loadMetrics();
-loadShips();
+initApp();
