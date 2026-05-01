@@ -19,47 +19,126 @@
       font-family: Arial, sans-serif;
       background: #07111f;
       color: #ffffff;
-    }
-
-    #appShell {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      background: #07111f;
-    }
-
-    #sidebar {
-      width: 350px;
-      height: 100vh;
-      background: #0a1626;
-      padding: 16px;
-      overflow-y: auto;
-      box-shadow: 6px 0 20px rgba(0,0,0,0.3);
-      z-index: 10;
+      overflow: hidden;
     }
 
     #map {
-      flex: 1;
+      position: fixed;
+      inset: 0;
+      width: 100vw;
       height: 100vh;
     }
 
+    #topBar {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      z-index: 30;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none;
+    }
+
+    .topPill {
+      pointer-events: auto;
+      background: rgba(10, 22, 38, 0.92);
+      color: white;
+      padding: 10px 14px;
+      border-radius: 999px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+      font-size: 14px;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+
+    .topButton {
+      pointer-events: auto;
+      background: rgba(10, 22, 38, 0.92);
+      color: white;
+      padding: 10px 14px;
+      border-radius: 999px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+      font-size: 14px;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+
+    #bottomSheet {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 42vh;
+      max-height: 520px;
+      min-height: 110px;
+      background: rgba(10, 22, 38, 0.96);
+      border-radius: 22px 22px 0 0;
+      z-index: 25;
+      box-shadow: 0 -8px 30px rgba(0,0,0,0.45);
+      transform: translateY(calc(100% - 118px));
+      transition: transform 0.25s ease;
+      overflow: hidden;
+      border-top: 1px solid rgba(255,255,255,0.12);
+    }
+
+    #bottomSheet.expanded {
+      transform: translateY(0);
+    }
+
+    #sheetHeader {
+      padding: 10px 16px 8px;
+      cursor: pointer;
+    }
+
+    #dragHandle {
+      width: 46px;
+      height: 5px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.35);
+      margin: 0 auto 10px;
+    }
+
+    #sheetTitleRow {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
     h1 {
-      font-size: 20px;
-      margin: 0 0 6px;
+      font-size: 17px;
+      margin: 0;
+      line-height: 1.2;
     }
 
     .subtitle {
       color: #9fb3c8;
-      margin-bottom: 16px;
+      font-size: 12px;
+      margin-top: 4px;
+    }
+
+    #sheetToggleText {
+      color: #79d7ff;
       font-size: 13px;
-      line-height: 1.4;
+      white-space: nowrap;
+    }
+
+    #sheetContent {
+      padding: 0 14px 18px;
+      overflow-y: auto;
+      height: calc(100% - 76px);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
     }
 
     .card {
       background: #13263c;
       padding: 12px;
-      border-radius: 10px;
-      margin-bottom: 12px;
+      border-radius: 12px;
     }
 
     .card h2 {
@@ -118,76 +197,119 @@
       font-size: 13px;
     }
 
-    @media (max-width: 768px) {
-      #appShell {
-        flex-direction: column;
-      }
-
-      #sidebar {
-        width: 100%;
-        max-height: 270px;
+    @media (min-width: 769px) {
+      #bottomSheet {
+        left: 16px;
+        right: auto;
+        top: 16px;
+        bottom: 16px;
+        width: 350px;
         height: auto;
+        max-height: none;
+        border-radius: 16px;
+        transform: none;
       }
 
-      #map {
-        height: calc(100vh - 270px);
+      #bottomSheet.expanded {
+        transform: none;
       }
 
-      h1 {
-        font-size: 18px;
+      #sheetHeader {
+        cursor: default;
+      }
+
+      #dragHandle,
+      #sheetToggleText,
+      #topBar {
+        display: none;
+      }
+
+      #sheetContent {
+        height: calc(100vh - 120px);
       }
     }
   </style>
 </head>
 
 <body>
-  <div id="appShell">
-    <div id="sidebar">
-      <h1>Singapore Port Tracker</h1>
-      <div class="subtitle">Live AISStream vessel traffic for Singapore Strait</div>
+  <div id="map"></div>
 
-      <div class="card">
-        <h2>Live Metrics</h2>
-        <div class="metric"><span>Total Ships</span><strong id="total_ships">-</strong></div>
-        <div class="metric"><span>Tankers</span><strong id="tankers">-</strong></div>
-        <div class="metric"><span>Cargo</span><strong id="cargo">-</strong></div>
-        <div class="metric"><span>Tug / Service</span><strong id="tug_service">-</strong></div>
-        <div class="metric"><span>Passenger</span><strong id="passenger">-</strong></div>
-        <div class="metric"><span>Other / Unknown</span><strong id="other_unknown">-</strong></div>
-        <div class="metric"><span>Anchored / Slow</span><strong id="anchored">-</strong></div>
-        <div class="metric"><span>Congestion</span><strong id="congestion">-</strong></div>
-      </div>
+  <div id="topBar">
+    <div class="topPill">Singapore Port Tracker</div>
+    <button class="topButton" onclick="toggleSheet()">Metrics</button>
+  </div>
 
-      <div class="card">
-        <h2>AISStream</h2>
-        <div class="metric"><span>Status</span><strong id="ais_mode">-</strong></div>
-        <div class="metric"><span>Connected</span><strong id="ais_connected">-</strong></div>
-        <div class="metric"><span>Total Msgs</span><strong id="ais_messages">-</strong></div>
-        <div class="metric"><span>Position Msgs</span><strong id="ais_position_messages">-</strong></div>
-        <div class="metric"><span>Static Msgs</span><strong id="ais_static_messages">-</strong></div>
-      </div>
-
-      <div class="card">
-        <h2>Legend</h2>
-        <div class="legend"><span class="symbol direction">➤</span>Heading / direction</div>
-        <div class="legend"><span class="symbol cargo">■</span>Cargo</div>
-        <div class="legend"><span class="symbol tanker">▲</span>Tanker</div>
-        <div class="legend"><span class="symbol tug">★</span>Tug / Service</div>
-        <div class="legend"><span class="symbol passenger">◆</span>Passenger</div>
-        <div class="legend"><span class="symbol unknown">●</span>Other / Unknown</div>
-      </div>
-
-      <div class="card">
-        <h2>Data note</h2>
-        <div class="note">
-          Arrows show AIS-reported heading. Vessel type comes from AIS static data when available.
+  <div id="bottomSheet">
+    <div id="sheetHeader" onclick="toggleSheet()">
+      <div id="dragHandle"></div>
+      <div id="sheetTitleRow">
+        <div>
+          <h1>Singapore Port Tracker</h1>
+          <div class="subtitle">Live AISStream vessel traffic for Singapore Strait</div>
         </div>
+        <div id="sheetToggleText">Expand</div>
       </div>
     </div>
 
-    <div id="map"></div>
+    <div id="sheetContent">
+      <div class="grid">
+        <div class="card">
+          <h2>Live Metrics</h2>
+          <div class="metric"><span>Total Ships</span><strong id="total_ships">-</strong></div>
+          <div class="metric"><span>Tankers</span><strong id="tankers">-</strong></div>
+          <div class="metric"><span>Cargo</span><strong id="cargo">-</strong></div>
+          <div class="metric"><span>Tug / Service</span><strong id="tug_service">-</strong></div>
+          <div class="metric"><span>Passenger</span><strong id="passenger">-</strong></div>
+          <div class="metric"><span>Other / Unknown</span><strong id="other_unknown">-</strong></div>
+          <div class="metric"><span>Anchored / Slow</span><strong id="anchored">-</strong></div>
+          <div class="metric"><span>Congestion</span><strong id="congestion">-</strong></div>
+        </div>
+
+        <div class="card">
+          <h2>AISStream</h2>
+          <div class="metric"><span>Status</span><strong id="ais_mode">-</strong></div>
+          <div class="metric"><span>Connected</span><strong id="ais_connected">-</strong></div>
+          <div class="metric"><span>Total Msgs</span><strong id="ais_messages">-</strong></div>
+          <div class="metric"><span>Position Msgs</span><strong id="ais_position_messages">-</strong></div>
+          <div class="metric"><span>Static Msgs</span><strong id="ais_static_messages">-</strong></div>
+        </div>
+
+        <div class="card">
+          <h2>Legend</h2>
+          <div class="legend"><span class="symbol direction">➤</span>Heading / direction</div>
+          <div class="legend"><span class="symbol cargo">■</span>Cargo</div>
+          <div class="legend"><span class="symbol tanker">▲</span>Tanker</div>
+          <div class="legend"><span class="symbol tug">★</span>Tug / Service</div>
+          <div class="legend"><span class="symbol passenger">◆</span>Passenger</div>
+          <div class="legend"><span class="symbol unknown">●</span>Other / Unknown</div>
+        </div>
+
+        <div class="card">
+          <h2>Data note</h2>
+          <div class="note">
+            Arrows show AIS-reported heading. Vessel type comes from AIS static data when available.
+            Route lines and moving pulses are illustrative SEA corridor overlays.
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <script src="/app.js?v=50"></script>
+  <script>
+    function toggleSheet() {
+      const sheet = document.getElementById("bottomSheet");
+      const text = document.getElementById("sheetToggleText");
+
+      sheet.classList.toggle("expanded");
+
+      if (sheet.classList.contains("expanded")) {
+        text.innerText = "Collapse";
+      } else {
+        text.innerText = "Expand";
+      }
+    }
+  </script>
+
+  <script src="/app.js?v=70"></script>
 </body>
 </html>
