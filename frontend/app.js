@@ -1,6 +1,6 @@
 mapboxgl.accessToken = "PASTE_YOUR_MAPBOX_PUBLIC_TOKEN_HERE";
 
-const API_BASE = "https://YOUR_RENDER_URL_HERE.onrender.com";
+const API_BASE = "https://singapore-port-tracker.onrender.com";
 
 const map = new mapboxgl.Map({
   container: "map",
