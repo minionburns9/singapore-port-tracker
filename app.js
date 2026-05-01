@@ -26,7 +26,6 @@ async function initApp() {
     appLog("/config loaded");
   } catch (error) {
     appLog("ERROR: Could not fetch /config: " + error);
-    mapContainer.innerHTML = "<div class='error-box'>Could not fetch /config.</div>";
     return;
   }
 
@@ -48,9 +47,11 @@ async function initApp() {
 
     map = new mapboxgl.Map({
       container: "map",
-      style: "mapbox://styles/mapbox/dark-v11",
-      center: [103.82, 1.25],
-      zoom: 9.5
+      style: "mapbox://styles/mapbox/satellite-streets-v12",
+      center: [103.82, 1.23],
+      zoom: 10.2,
+      pitch: 0,
+      bearing: 0
     });
 
     appLog("Mapbox map object created");
@@ -59,7 +60,68 @@ async function initApp() {
 
     map.on("load", async function () {
       appLog("Mapbox map LOAD event fired");
-      await loadShips(map);
+
+      map.addSource("ships-source", {
+        type: "geojson",
+        data: emptyFeatureCollection()
+      });
+
+      map.addLayer({
+        id: "ships-glow",
+        type: "circle",
+        source: "ships-source",
+        paint: {
+          "circle-radius": 12,
+          "circle-color": ["get", "color"],
+          "circle-opacity": 0.20,
+          "circle-blur": 0.9
+        }
+      });
+
+      map.addLayer({
+        id: "ships",
+        type: "circle",
+        source: "ships-source",
+        paint: {
+          "circle-radius": 6,
+          "circle-color": ["get", "color"],
+          "circle-stroke-width": 1,
+          "circle-stroke-color": "#ffffff",
+          "circle-opacity": 0.95
+        }
+      });
+
+      map.on("click", "ships", function (event) {
+        const feature = event.features[0];
+        const props = feature.properties;
+        const coords = feature.geometry.coordinates.slice();
+
+        new mapboxgl.Popup()
+          .setLngLat(coords)
+          .setHTML(`
+            <strong>${props.name}</strong><br>
+            MMSI: ${props.mmsi}<br>
+            Type: ${props.type}<br>
+            Speed: ${props.speed} knots<br>
+            Heading: ${props.heading}°<br>
+            Source: ${props.source}<br>
+            Last seen: ${props.last_seen}
+          `)
+          .addTo(map);
+      });
+
+      map.on("mouseenter", "ships", function () {
+        map.getCanvas().style.cursor = "pointer";
+      });
+
+      map.on("mouseleave", "ships", function () {
+        map.getCanvas().style.cursor = "";
+      });
+
+      await refreshAll(map);
+      setInterval(async function () {
+        await refreshAll(map);
+      }, 10000);
     });
 
     map.on("error", function (event) {
@@ -71,14 +133,33 @@ async function initApp() {
     mapContainer.innerHTML = "<div class='error-box'>Mapbox map creation failed.</div>";
     return;
   }
+}
 
+async function refreshAll(map) {
+  await loadStatus();
   await loadMetrics();
+  await loadShips(map);
+}
+
+async function loadStatus() {
+  try {
+    const res = await fetch("/ais-status");
+    const data = await res.json();
+
+    document.getElementById("ais_mode").innerText = data.mode || "-";
+    document.getElementById("ais_connected").innerText = data.connected ? "Yes" : "No";
+    document.getElementById("ais_messages").innerText = data.message_count || 0;
+    document.getElementById("ais_last_message").innerText = data.last_message_time || "-";
+    document.getElementById("ais_error").innerText = data.error || "-";
+
+    appLog("AIS status: " + data.mode + ", messages: " + data.message_count);
+  } catch (error) {
+    appLog("ERROR: Could not load /ais-status: " + error);
+  }
 }
 
 async function loadMetrics() {
   try {
-    appLog("Fetching /metrics");
-
     const res = await fetch("/metrics");
     const data = await res.json();
 
@@ -96,41 +177,56 @@ async function loadMetrics() {
 
 async function loadShips(map) {
   try {
-    appLog("Fetching /ships");
-
     const res = await fetch("/ships");
     const ships = await res.json();
 
     appLog("/ships loaded. Count: " + ships.length);
 
-    ships.forEach((ship) => {
-      const color =
-        ship.type === "Tanker" ? "#ff4d4d" :
-        ship.type === "Cargo" ? "#3aa0ff" :
-        ship.type === "Tug" ? "#ffd166" :
-        "#9dff7a";
+    const geojson = {
+      type: "FeatureCollection",
+      features: ships.map(function (ship) {
+        return {
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: [ship.lng, ship.lat]
+          },
+          properties: {
+            mmsi: ship.mmsi || "-",
+            name: ship.name || "Unknown vessel",
+            type: ship.type || "Unknown",
+            speed: ship.speed || 0,
+            heading: ship.heading || 0,
+            last_seen: ship.last_seen || "-",
+            source: ship.source || "AISStream",
+            color: getShipColor(ship.type)
+          }
+        };
+      })
+    };
 
-      const el = document.createElement("div");
-      el.className = "ship-marker";
-      el.style.background = color;
-      el.style.boxShadow = `0 0 10px ${color}`;
+    const source = map.getSource("ships-source");
+    if (source) {
+      source.setData(geojson);
+    }
 
-      new mapboxgl.Marker(el)
-        .setLngLat([ship.lng, ship.lat])
-        .setPopup(
-          new mapboxgl.Popup().setHTML(`
-            <strong>${ship.name}</strong><br>
-            Type: ${ship.type}<br>
-            Speed: ${ship.speed} knots
-          `)
-        )
-        .addTo(map);
-    });
-
-    appLog("Ship markers added");
   } catch (error) {
     appLog("ERROR: Could not load ships: " + error);
   }
+}
+
+function getShipColor(type) {
+  if (type === "Tanker") return "#ff4d4d";
+  if (type === "Cargo") return "#3aa0ff";
+  if (type === "Tug") return "#ffd166";
+  return "#9dff7a";
+}
+
+function emptyFeatureCollection() {
+  return {
+    type: "FeatureCollection",
+    features: []
+  };
 }
 
 initApp();
