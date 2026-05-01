@@ -1,24 +1,153 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <title>Singapore Port Tracker</title>
 
-  <link rel="stylesheet" href="/style.css?v=3">
-
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.js"></script>
-  <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.css" rel="stylesheet">
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.css" rel="stylesheet" />
 
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      font-family: Arial, sans-serif;
+      background: #07111f;
+      color: #ffffff;
+      overflow: hidden;
+    }
+
+    #appShell {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      background: #07111f;
+    }
+
+    #sidebar {
+      width: 320px;
+      height: calc(100vh - 170px);
+      background: #0a1626;
+      padding: 20px;
+      overflow-y: auto;
+      box-shadow: 8px 0 25px rgba(0, 0, 0, 0.35);
+      z-index: 10;
+    }
+
+    #map {
+      flex: 1;
+      height: calc(100vh - 170px);
+      min-height: 400px;
+      background: #07111f;
+    }
+
+    h1 {
+      font-size: 24px;
+      margin: 0 0 6px;
+    }
+
+    .subtitle {
+      color: #9fb3c8;
+      margin: 0 0 20px;
+      line-height: 1.4;
+    }
+
+    .card {
+      background: #13263c;
+      padding: 16px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .card h2 {
+      font-size: 16px;
+      margin: 0 0 12px;
+      color: #9ed8ff;
+    }
+
+    .card p {
+      margin: 0;
+      line-height: 1.5;
+      color: #d8e6f3;
+    }
+
+    .metric {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .metric:last-child {
+      border-bottom: none;
+    }
+
+    .metric strong {
+      color: #79d7ff;
+    }
+
+    .legend {
+      display: flex;
+      align-items: center;
+      margin: 8px 0;
+      color: #d8e6f3;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      display: inline-block;
+      margin-right: 8px;
+      border: 1px solid #ffffff;
+    }
+
+    .cargo {
+      background: #3aa0ff;
+    }
+
+    .tanker {
+      background: #ff4d4d;
+    }
+
+    .tug {
+      background: #ffd166;
+    }
+
+    .passenger {
+      background: #9dff7a;
+    }
+
+    .ship-marker {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      border: 1px solid #ffffff;
+    }
+
+    .mapboxgl-popup-content {
+      color: #111111;
+      font-size: 13px;
+    }
+
     #logBox {
       position: fixed;
       bottom: 0;
       left: 0;
       right: 0;
-      height: 180px;
-      background: #000;
+      height: 170px;
+      background: #000000;
       color: #00ff9c;
       font-family: monospace;
       font-size: 12px;
@@ -27,80 +156,96 @@
       z-index: 9999;
       border-top: 2px solid #00ff9c;
     }
+
+    .error-box {
+      color: white;
+      background: #8b1e1e;
+      padding: 20px;
+      margin: 20px;
+      border-radius: 10px;
+      font-size: 16px;
+    }
+
+    @media (max-width: 800px) {
+      #appShell {
+        flex-direction: column;
+      }
+
+      #sidebar {
+        width: 100%;
+        height: 300px;
+      }
+
+      #map {
+        width: 100%;
+        height: calc(100vh - 470px);
+        min-height: 300px;
+      }
+    }
   </style>
 </head>
 
 <body>
+  <div id="appShell">
+    <div id="sidebar">
+      <h1>Singapore Port Tracker</h1>
+      <p class="subtitle">Singapore Strait vessel traffic prototype</p>
 
-  <div id="sidebar">
-    <h1>Singapore Port Tracker</h1>
-    <p class="subtitle">Singapore Strait vessel traffic prototype</p>
+      <div class="card">
+        <h2>Live Metrics</h2>
+        <div class="metric"><span>Total Ships</span><strong id="total_ships">-</strong></div>
+        <div class="metric"><span>Tankers</span><strong id="tankers">-</strong></div>
+        <div class="metric"><span>Cargo</span><strong id="cargo">-</strong></div>
+        <div class="metric"><span>Anchored</span><strong id="anchored">-</strong></div>
+        <div class="metric"><span>Congestion</span><strong id="congestion">-</strong></div>
+      </div>
 
-    <div class="card">
-      <h2>Live Metrics</h2>
-      <div class="metric"><span>Total Ships</span><strong id="total_ships">-</strong></div>
-      <div class="metric"><span>Tankers</span><strong id="tankers">-</strong></div>
-      <div class="metric"><span>Cargo</span><strong id="cargo">-</strong></div>
-      <div class="metric"><span>Anchored</span><strong id="anchored">-</strong></div>
-      <div class="metric"><span>Congestion</span><strong id="congestion">-</strong></div>
+      <div class="card">
+        <h2>Legend</h2>
+        <div class="legend"><span class="dot cargo"></span>Cargo</div>
+        <div class="legend"><span class="dot tanker"></span>Tanker</div>
+        <div class="legend"><span class="dot tug"></span>Tug</div>
+        <div class="legend"><span class="dot passenger"></span>Passenger / Other</div>
+      </div>
+
+      <div class="card">
+        <h2>Status</h2>
+        <p>Debug logging enabled. Base version uses simulated vessel data.</p>
+      </div>
     </div>
 
-    <div class="card">
-      <h2>Status</h2>
-      <p>Debug logging enabled below.</p>
-    </div>
+    <div id="map"></div>
   </div>
 
-  <div id="map"></div>
-
-  <!-- LOG BOX -->
   <div id="logBox"></div>
 
-  <!-- LOGGING SCRIPT -->
   <script>
     const logBox = document.getElementById("logBox");
 
-    function log(msg) {
+    function appLog(message) {
       const time = new Date().toLocaleTimeString();
-      const line = `[${time}] ${msg}`;
+      const line = `[${time}] ${message}`;
       console.log(line);
       logBox.innerHTML += line + "<br>";
       logBox.scrollTop = logBox.scrollHeight;
     }
 
-    log("Page loaded");
+    window.appLog = appLog;
+
+    appLog("index.html loaded");
+    appLog("Inline CSS active");
+    appLog("Map container exists: " + Boolean(document.getElementById("map")));
+    appLog("Mapbox library status: " + (typeof mapboxgl !== "undefined" ? "loaded" : "missing"));
 
     window.onerror = function (msg, url, line, col, error) {
-      log("ERROR: " + msg);
+      appLog("WINDOW ERROR: " + msg + " at line " + line);
     };
 
     window.addEventListener("unhandledrejection", function (event) {
-      log("PROMISE ERROR: " + event.reason);
+      appLog("PROMISE ERROR: " + event.reason);
     });
-
-    // Check Mapbox loaded
-    if (typeof mapboxgl === "undefined") {
-      log("Mapbox library FAILED to load");
-    } else {
-      log("Mapbox library loaded");
-    }
-
-    // Test config endpoint
-    fetch("/config")
-      .then(res => res.json())
-      .then(data => {
-        if (!data.mapbox_token) {
-          log("Mapbox token MISSING from /config");
-        } else {
-          log("Mapbox token RECEIVED");
-        }
-      })
-      .catch(err => {
-        log("Config fetch FAILED: " + err);
-      });
   </script>
 
-  <script src="/app.js?v=3"></script>
-
+  <script src="/app.js?v=20"></script>
 </body>
 </html>

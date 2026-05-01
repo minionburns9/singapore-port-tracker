@@ -19,21 +19,9 @@ def serve_index():
     return FileResponse("index.html", media_type="text/html")
 
 
-@app.get("/style.css")
-def serve_css():
-    return FileResponse("style.css", media_type="text/css")
-
-
 @app.get("/app.js")
 def serve_js():
     return FileResponse("app.js", media_type="application/javascript")
-
-
-@app.get("/config")
-def get_config():
-    return JSONResponse({
-        "mapbox_token": os.getenv("MAPBOX_TOKEN")
-    })
 
 
 @app.get("/health")
@@ -42,6 +30,13 @@ def health_check():
         "status": "running",
         "message": "Singapore Port Tracker API is live"
     }
+
+
+@app.get("/config")
+def get_config():
+    return JSONResponse({
+        "mapbox_token": os.getenv("MAPBOX_TOKEN")
+    })
 
 
 @app.get("/metrics")
