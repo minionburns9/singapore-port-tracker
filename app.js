@@ -1,4 +1,4 @@
-mapboxgl.accessToken = "PASTE_YOUR_MAPBOX_PUBLIC_TOKEN_HERE";
+mapboxgl.accessToken = "window.MAPBOX_TOKEN";
 
 const API_BASE = "https://singapore-port-tracker.onrender.com";
 
